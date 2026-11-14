@@ -64,7 +64,7 @@ body.opened #dots { opacity: 1; }
 
 #music { position: fixed; top: 12px; left: 50%; z-index: 62; width: 46px; height: 46px; border-radius: 50%;
   transform: translateX(calc(var(--col) / 2 - 58px)); border: 1px solid rgba(239,224,176,.75);
-  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.35), rgba(31,42,68,.55) 70%); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.35), rgba(31,42,68,.82) 70%);
   display: grid; place-items: center; opacity: 0; transition: opacity .8s; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
 body.opened #music { opacity: 1; }
 #music svg { width: 24px; height: 24px; }
@@ -99,6 +99,13 @@ body.opened #music { opacity: 1; }
 .tilt { position: absolute; inset: 0; }
 .shade { position: absolute; inset: 0; background: #0e1020; opacity: 0; pointer-events: none; z-index: 30; }
 .scene.asleep * { animation-play-state: paused !important; }
+/* Scenes two or more away are fully covered or off-screen: skip painting them entirely (big win on phones). */
+.scene.asleep .frame { visibility: hidden; }
+.static .scene.asleep .frame { visibility: visible; }
+/* Only scenes near the camera get their own GPU layers. */
+.scene:not(.asleep) .view { will-change: transform; }
+.scene:not(.asleep) .shade { will-change: opacity; }
+.scene:not(.asleep) .kb { will-change: transform; }
 
 /* background "art board": a 9:16 box that covers the view like object-fit:cover, so overlays can be placed in % of the painting */
 .bg { position: absolute; inset: 0; overflow: hidden; }
@@ -106,7 +113,7 @@ body.opened #music { opacity: 1; }
 #opener .board { width: max(100%, calc(var(--vh) * 56.25)); }
 .board.tall { width: max(118%, calc(var(--vh) * 74)); }
 .board > .pic, .board > .pic img, .board > .pic video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.kb { animation: kenburns 20s ease-in-out infinite alternate; will-change: transform; transform-origin: 50% 50%; }
+.kb { animation: kenburns 20s ease-in-out infinite alternate; transform-origin: 50% 50%; }
 .kb.alt { animation-direction: alternate-reverse; transform-origin: 40% 60%; }
 @keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.08); } }
 .grade { position: absolute; inset: 0; pointer-events: none; }
@@ -128,7 +135,7 @@ body.opened #music { opacity: 1; }
 .cut.fallback { display: none !important; }
 
 /* soft light: candle glow, rays, vignette */
-.glow { position: absolute; border-radius: 50%; pointer-events: none;
+.glow { position: absolute; border-radius: 50%; pointer-events: none; will-change: opacity;
   background: radial-gradient(circle, rgba(255,214,150,.75) 0%, rgba(255,190,120,.35) 35%, rgba(255,170,100,0) 70%); will-change: opacity, transform; }
 .vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 85% 70% at 50% 50%, transparent 55%, rgba(20,14,26,.55) 100%); }
 .rays { position: absolute; inset: -20% -30% 20% -10%; pointer-events: none; opacity: .55; }
@@ -545,7 +552,7 @@ body.opened #music { opacity: 1; }
 .contacts { position: absolute; left: 0; right: 0; top: 470px; display: grid; gap: 8px; padding: 0 24px; }
 .contacts .caps { text-align: center; font-size: 10.5px; color: var(--gold-hi); }
 .contact { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 8px 16px; border-radius: 12px; text-decoration: none; color: var(--ivory);
-  background: rgba(251,247,240,.08); border: 1px solid rgba(239,224,176,.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  background: rgba(20,24,52,.55); border: 1px solid rgba(239,224,176,.35); }
 .contact b { font: 400 22px/1.1 var(--script); display: block; }
 .contact small { font: italic 12px var(--fell); color: rgba(251,247,240,.75); }
 .contact span.ph { font: 600 12px var(--caps); letter-spacing: .1em; color: var(--gold-hi); white-space: nowrap; }

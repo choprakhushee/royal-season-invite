@@ -501,7 +501,7 @@ const CONFIG = {
         for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6) * (i < 80 ? i / 80 : 1); }
         this.verb = ctx.createConvolver(); this.verb.buffer = ir;
         const wet = ctx.createGain(); wet.gain.value = 0.42; this.verb.connect(wet); wet.connect(this.master);
-        this.musicBus = ctx.createGain(); this.musicBus.connect(this.music); this.musicBus.connect(this.verb);
+        this.musicBus = ctx.createGain(); this.musicBus.gain.value = 1.6; this.musicBus.connect(this.music); this.musicBus.connect(this.verb);
         this.sfxBus = ctx.createGain(); this.sfxBus.connect(this.sfx); const sv = ctx.createGain(); sv.gain.value = .5; this.sfxBus.connect(sv); sv.connect(this.verb);
         this.noise = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate); const nd = this.noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
       }
@@ -509,19 +509,6 @@ const CONFIG = {
       return true;
     },
     mtof: (m) => 440 * Math.pow(2, (m - 69) / 12),
-    bowed(t, midi, dur, vel, { pan = 0, bright = 2.6, vib = 0.0045, att = 0.14, hp = 90 } = {}) {
-      const ctx = this.ctx, f = this.mtof(midi), end = t + dur;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vel, t + att); g.gain.setTargetAtTime(vel * .78, t + att, .35); g.gain.setTargetAtTime(0.0001, end, .18);
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(Math.min(f * bright * .6, 5000), t); lp.frequency.linearRampToValueAtTime(Math.min(f * bright, 5200), t + att * 2); lp.Q.value = .6;
-      const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 900; body.gain.value = 3; body.Q.value = 1.1;
-      const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = hp;
-      const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 5 + Math.random() * .8; const lg = ctx.createGain(); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * vib, t + .5); lfo.connect(lg);
-      [-8, 0, 7].forEach((cents) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = cents + (Math.random() * 4 - 2); lg.connect(o.frequency); o.connect(lp); o.start(t); o.stop(end + 1); });
-      lfo.start(t); lfo.stop(end + 1);
-      lp.connect(body); body.connect(hpf); hpf.connect(g);
-      if (p) { p.pan.value = pan; g.connect(p); p.connect(this.musicBus); } else g.connect(this.musicBus);
-    },
     pluck(t, midi, vel, bus, { pan = 0, santoor = false } = {}) {
       const ctx = this.ctx, f = this.mtof(midi);
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .005); g.gain.exponentialRampToValueAtTime(0.0001, t + (santoor ? 1.4 : 2.2));
@@ -531,30 +518,105 @@ const CONFIG = {
       const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
       lp.connect(g); if (p) { p.pan.value = pan; g.connect(p); p.connect(bus); } else g.connect(bus);
     },
-    // A gentle original waltz in D major, 3/4, ~88 bpm. [chord tones for cello/viola], melody as [midi, beats]
-    score: {
-      chords: [[50, 62, 66], [47, 62, 66], [43, 62, 67], [45, 61, 64], [50, 62, 66], [42, 61, 66], [43, 62, 67], [45, 61, 67],
-               [47, 62, 66], [43, 62, 67], [50, 62, 66], [45, 61, 64], [43, 62, 67], [45, 61, 64], [50, 62, 66], [50, 57, 62]],
-      melody: [[[69, 1], [74, 1], [78, 1]], [[78, 2], [76, 1]], [[71, 1], [74, 1], [79, 1]], [[78, 1], [76, 2]],
-               [[81, 2], [78, 1]], [[81, 1], [85, 1], [81, 1]], [[83, 1.5], [81, .5], [79, 1]], [[76, 3]],
-               [[78, 1], [74, 1], [71, 1]], [[79, 2], [83, 1]], [[81, 1], [78, 1], [74, 1]], [[76, 1], [73, 1], [76, 1]],
-               [[74, 1], [79, 1], [83, 1]], [[85, 1.5], [83, .5], [81, 1]], [[86, 3]], [[81, 2], [78, 1]]]
+    // ---------------------------------------------------------------------------------
+    // ORIGINAL MUSIC · an Indian violin piece in Raag Yaman (Sa = D), keherwa taal, ~76 bpm.
+    // A bowed violin sings legato phrases with meend (glides), gamak (oscillations) and kan
+    // (grace notes) over a tanpura drone, soft tabla and santoor shimmers.
+    // Phrase notes: [semitones from Sa, beats, ornament]  ornaments: g gamak · a sustain · m meend · k kan
+    // ---------------------------------------------------------------------------------
+    raga: {
+      sa: 62, beat: 60 / 76,
+      phrases: [
+        [[-1, 1], [2, 1], [4, 2, 'g'], [2, 1, 'k'], [0, 3, 'a']],                    // Ni Re Ga~ Re Sa
+        [[-1, 1], [2, 1], [4, 1], [6, 1, 'k'], [7, 4, 'a']],                          // Ni Re Ga Ma Pa
+        [[6, 1], [4, 1], [6, 1], [9, 1, 'm'], [7, 2, 'g'], [6, 1], [4, 1]],          // Ma Ga Ma Dha Pa~ Ma Ga
+        [[2, 1], [4, 1, 'k'], [2, 1], [0, 5, 'a']],                                   // Re Ga Re Sa
+        [[7, 1], [9, 1], [11, 1, 'k'], [12, 5, 'a']],                                 // Pa Dha Ni Sa'
+        [[12, 1], [14, 1, 'k'], [12, 1], [11, 1], [9, 2, 'g'], [7, 2]],              // Sa' Re' Sa' Ni Dha~ Pa
+        [[6, 1], [9, 1, 'm'], [7, 1], [6, 1], [4, 2, 'g'], [2, 2]],                  // Ma Dha Pa Ma Ga~ Re
+        [[-1, 1, 'm'], [2, 1], [0, 6, 'a']]                                            // Ni Re Sa
+      ],
+      taal: ['dha', 'ge', 'na', 'ti', 'na', 'ka', 'dhi', 'na']                        // keherwa, 8 matras
     },
+    violinPhrase(t, notes, vel = .085, octave = 0) {
+      const ctx = this.ctx, R = this.raga, beat = R.beat, f = (s) => this.mtof(R.sa + s + octave);
+      const total = notes.reduce((a, n) => a + n[1], 0) * beat, end = t + total;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vel, t + .22);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = .7;
+      const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 1050; body.gain.value = 4; body.Q.value = 1;
+      const air = ctx.createBiquadFilter(); air.type = 'peaking'; air.frequency.value = 2700; air.gain.value = 3; air.Q.value = 1.4;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 190;
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.setValueAtTime(5.4, t); depth.gain.setValueAtTime(0, t); lfo.connect(depth);
+      const oscs = [-6, 0, 5].map((c) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.detune.value = c; depth.connect(o.frequency); o.connect(lp); return o; });
+      let at = t, prev = null;
+      notes.forEach(([s, b, orn], i) => {
+        const fr = f(s), d = b * beat, glide = orn === 'm' ? .38 : .09;
+        oscs.forEach((o) => {
+          if (prev === null) o.frequency.setValueAtTime(fr, at);
+          else { o.frequency.setValueAtTime(prev, Math.max(t, at - glide)); o.frequency.exponentialRampToValueAtTime(fr, at); }
+          if (orn === 'k') { const up = f(s + 2); o.frequency.setValueAtTime(up, at); o.frequency.exponentialRampToValueAtTime(fr, at + .08); }
+        });
+        // bow: a gentle re-articulation at each note, a swell on sustained notes
+        if (i) { g.gain.setTargetAtTime(vel * .8, at - .03, .03); g.gain.setTargetAtTime(vel, at + .04, .08); }
+        if (orn === 'a') { g.gain.setTargetAtTime(vel * 1.15, at + .2, d * .3); g.gain.setTargetAtTime(vel * .85, at + d * .65, d * .2); }
+        // vibrato: subtle by default, wide and slow for gamak, blooming on sustained notes
+        const dv = orn === 'g' ? fr * .028 : orn === 'a' ? fr * .009 : fr * .005;
+        lfo.frequency.setTargetAtTime(orn === 'g' ? 4.2 : 5.4, at, .05);
+        depth.gain.setTargetAtTime(0, at, .02); depth.gain.setTargetAtTime(dv, at + Math.min(.25, d * .3), .12);
+        prev = fr; at += d;
+      });
+      g.gain.setTargetAtTime(0.0001, end - .15, .18);
+      oscs.forEach((o) => { o.start(t); o.stop(end + 1.2); }); lfo.start(t); lfo.stop(end + 1.2);
+      lp.connect(body); body.connect(air); air.connect(hp); hp.connect(g);
+      const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (p) { p.pan.value = -.08; g.connect(p); p.connect(this.musicBus); } else g.connect(this.musicBus);
+    },
+    tanpura(t, midi, vel = .028) {
+      const ctx = this.ctx, fr = this.mtof(midi);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vel, t + .04); g.gain.setTargetAtTime(0.0001, t + .3, 1.1);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2; bp.frequency.setValueAtTime(2600, t); bp.frequency.exponentialRampToValueAtTime(700, t + 2.6); // jawari shimmer
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+      const mix = ctx.createGain(); mix.gain.value = .55;
+      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = fr; a.detune.value = 3;
+      const b = ctx.createOscillator(); b.type = 'triangle'; b.frequency.value = fr; b.detune.value = -3;
+      a.connect(bp); a.connect(lp); b.connect(lp); bp.connect(mix); mix.connect(g); lp.connect(g);
+      const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (p) { p.pan.value = .35; g.connect(p); p.connect(this.musicBus); } else g.connect(this.musicBus);
+      a.start(t); b.start(t); a.stop(t + 4); b.stop(t + 4);
+    },
+    drum(t, freq, { to = freq, decay = .3, vel = .1, type = 'sine', over = 0 } = {}) {
+      const ctx = this.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(to, t + Math.min(decay, .3));
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .004); g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      o.connect(g); g.connect(this.musicBus); o.start(t); o.stop(t + decay + .05);
+      if (over) { const o2 = ctx.createOscillator(), g2 = ctx.createGain(); o2.frequency.value = freq * 2.01; g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vel * over, t + .003); g2.gain.exponentialRampToValueAtTime(0.0001, t + decay * .5); o2.connect(g2); g2.connect(this.musicBus); o2.start(t); o2.stop(t + decay); }
+    },
+    tabla(t, bol, v = 1) {
+      const na = (vv) => { this.drum(t, 640, { to: 618, decay: .34, vel: .07 * vv, over: .45 }); this.noiseHit(t, { freq: 3400, q: 2, dur: .02, vel: .03 * vv, bus: this.musicBus }); };
+      const ge = (vv) => this.drum(t, 92, { to: 124, decay: .45, vel: .075 * vv });
+      if (bol === 'dha') { ge(v); na(v); }
+      else if (bol === 'ge') ge(v * .9);
+      else if (bol === 'na') na(v);
+      else if (bol === 'ti') this.drum(t, 920, { to: 880, decay: .08, vel: .045 * v });
+      else if (bol === 'ka') this.noiseHit(t, { freq: 380, q: .8, dur: .07, vel: .08 * v, type: 'lowpass', bus: this.musicBus });
+      else if (bol === 'dhi') { ge(v * .7); this.drum(t, 640, { to: 630, decay: .55, vel: .05 * v, over: .3 }); }
+    },
+    santoor(t, midi, n = 6, vel = .04) { for (let i = 0; i < n; i++) this.pluck(t + i * .075, midi + (i % 2 ? 0 : 12), vel * (1 - i / (n + 2)), this.musicBus, { pan: .45, santoor: true }); },
     scheduleBar(t, n) {
-      const beat = 60 / 88, sc = this.score, k = n % 16, pass = Math.floor(n / 16) % 2, ch = sc.chords[k];
-      // cello: root on the downbeat
-      this.bowed(t, ch[0] - (ch[0] > 48 ? 12 : 0), beat * 2.7, .085, { pan: -.25, bright: 3.2, vib: .003, att: .09, hp: 40 });
-      // viola: soft double-stops on beats two and three
-      [1, 2].forEach((b) => { ch.slice(1).forEach((m) => this.bowed(t + beat * b, m - 12, beat * .78, .028, { pan: .3, bright: 2.4, vib: .003, att: .06, hp: 120 })); });
-      // violin: the melody (an octave lower on the second pass for colour)
-      let at = 0; sc.melody[k].forEach(([m, d]) => { this.bowed(t + at * beat, m - (pass ? 12 : 0), d * beat * .97, .07, { pan: -.05, bright: 2.8, vib: .005, att: .12, hp: 200 }); at += d; });
-      // harp / santoor accents every fourth bar
-      if (k % 4 === 3) { const arp = [ch[1], ch[2], ch[1] + 12, ch[2] + 12, ch[1] + 24]; arp.forEach((m, j) => this.pluck(t + beat * 2 + j * .09, m, .07, this.musicBus, { pan: .4 - j * .15, santoor: pass === 1 })); }
-      if (k === 15) this.pluck(t, 86, .05, this.musicBus, { santoor: true });
+      const R = this.raga, beat = R.beat, k = n % 16, pass = Math.floor(n / 16), hum = () => (Math.random() - .5) * .012;
+      // tanpura: Pa, Sa, Sa, low Sa
+      [R.sa - 17, R.sa - 12, R.sa - 12, R.sa - 24].forEach((m, i) => this.tanpura(t + i * beat, i === 3 ? m + 12 : m, i === 3 ? .02 : .026));
+      // violin: one phrase every two cycles
+      if (k % 2 === 0) this.violinPhrase(t, R.phrases[k / 2], .085, pass % 2 && k >= 8 ? -12 : 0);
+      // tabla enters after the opening alaap
+      if (n >= 4) R.taal.forEach((bol, i) => this.tabla(t + i * beat / 2 + hum(), bol, i % 4 === 0 ? 1 : .8));
+      // santoor shimmer as each phrase rests
+      if (k % 2 === 1) this.santoor(t + beat * 2.5, k % 4 === 1 ? R.sa + 7 : R.sa + 12, 6, .032);
+      if (k === 15) [0, 2, 4, 6, 7, 9, 11, 12].forEach((s, i) => this.pluck(t + beat * 3 + i * .07, R.sa + 12 + s, .03, this.musicBus, { santoor: true, pan: -.3 + i * .08 }));
     },
     tick() {
-      const ctx = this.ctx, bar = 3 * 60 / 88;
-      while (this.nextBar < ctx.currentTime + 0.35) { this.scheduleBar(this.nextBar, this.bar++); this.nextBar += bar; }
+      const ctx = this.ctx, bar = 4 * this.raga.beat;
+      while (this.nextBar < ctx.currentTime + 0.4) { this.scheduleBar(this.nextBar, this.bar++); this.nextBar += bar; }
     },
     async detectFile() {
       const f = CONFIG.music.file; if (!f) return;
@@ -581,11 +643,11 @@ const CONFIG = {
       ui.music(false);
     },
     toggle() { this.on ? this.stop() : this.start(); },
-    noiseHit(t, { freq = 1800, q = 1.4, dur = .2, vel = .2, type = 'bandpass' } = {}) {
+    noiseHit(t, { freq = 1800, q = 1.4, dur = .2, vel = .2, type = 'bandpass', bus = null } = {}) {
       const ctx = this.ctx, s = ctx.createBufferSource(); s.buffer = this.noise;
       const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      s.connect(f); f.connect(g); g.connect(this.sfxBus); s.start(t, Math.random()); s.stop(t + dur + .05);
+      s.connect(f); f.connect(g); g.connect(bus || this.sfxBus); s.start(t, Math.random()); s.stop(t + dur + .05);
     },
     play(name) {
       if (!this.ctx || !this.on) return;
@@ -603,7 +665,7 @@ const CONFIG = {
         const o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + .2);
         g.gain.setValueAtTime(.3, t); g.gain.exponentialRampToValueAtTime(0.0001, t + .25); o.connect(g); g.connect(this.sfxBus); o.start(t); o.stop(t + .3);
       } else if (name === 'harp') {
-        [62, 66, 69, 74, 78, 81, 86, 90].forEach((m, j) => this.pluck(t + j * .075, m, .06, this.sfxBus, { pan: -.6 + j * .17 }));
+        [62, 64, 66, 68, 69, 71, 73, 74, 76, 78].forEach((m, j) => this.pluck(t + j * .065, m + 12, .05, this.sfxBus, { pan: -.6 + j * .13, santoor: true }));
       }
     }
   };
@@ -619,7 +681,7 @@ const CONFIG = {
       this.resize();
     },
     resize() {
-      this.dpr = Math.min(devicePixelRatio || 1, 2); this.W = this.cv.clientWidth; this.H = innerHeight;
+      this.dpr = Math.min(devicePixelRatio || 1, small ? 1.5 : 2); this.W = this.cv.clientWidth; this.H = innerHeight;
       this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr);
     },
     petal(x, y, kind) {
@@ -689,7 +751,7 @@ const CONFIG = {
       this.colors.forEach((c) => { const s = document.createElement('canvas'); s.width = s.height = 32; const g = s.getContext('2d'); const r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
         r.addColorStop(0, '#ffffff'); r.addColorStop(.2, c); r.addColorStop(.5, c + '66'); r.addColorStop(1, c + '00'); g.fillStyle = r; g.fillRect(0, 0, 32, 32); this.sprites[c] = s; });
     },
-    resize() { this.dpr = Math.min(devicePixelRatio || 1, 2); this.W = this.cv.clientWidth; this.H = this.cv.clientHeight; this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr); },
+    resize() { this.dpr = Math.min(devicePixelRatio || 1, small ? 1.5 : 2); this.W = this.cv.clientWidth; this.H = this.cv.clientHeight; this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr); },
     set(on) { if (STATIC || on === this.on) return; this.on = on; if (on) { this.resize(); this.next = 0; gsap.ticker.add(this.step); } },
     launch() {
       const W = this.W, H = this.H;
@@ -742,7 +804,7 @@ const CONFIG = {
       s.el.style.transform = `rotate(${a.toFixed(3)}deg)`;
     }
     for (const fl of flickers) {
-      if (fl.sec >= 0 && Math.abs(fl.sec - active) > 1 && !(fl.sec === -1)) continue;
+      if (fl.sec === -1 ? opened : Math.abs(fl.sec - active) > 1) continue;
       const n = .55 * Math.sin(time * 7.3 + fl.s) + .3 * Math.sin(time * 13.9 + fl.s * 2.1) + .15 * Math.sin(time * 29.7 + fl.s * 3.3);
       fl.el.style.opacity = clamp(fl.base + fl.range * n * .5, 0, 1).toFixed(3);
       fl.el.style.transform = `scale(${(1 + n * .025).toFixed(4)})`;
@@ -814,10 +876,11 @@ const CONFIG = {
     });
     $('.countdown').setAttribute('aria-label', `${vals[0]} days, ${vals[1]} hours, ${vals[2]} minutes and ${vals[3]} seconds to go`);
   }
+  const handEls = {};
   function hands() {
     if (Math.abs(active - 6) > 1 && !STATIC) return;
     const n = new Date(), s = n.getSeconds() + n.getMilliseconds() / 1000, m = n.getMinutes() + s / 60, h = (n.getHours() % 12) + m / 60;
-    const set = (sel, deg) => { const el = $(sel); if (el) el.style.transform = `rotate(${deg}deg)`; };
+    const set = (sel, deg) => { const el = handEls[sel] || (handEls[sel] = $(sel)); if (el) el.style.transform = `rotate(${deg.toFixed(2)}deg)`; };
     set('.watch .hand.h', h * 30); set('.watch .hand.m', m * 6); set('.watch .hand.s', s * 6);
   }
 
@@ -1022,10 +1085,11 @@ const CONFIG = {
      MOTION · Lenis + ScrollTrigger, layered scenes
      ====================================================================== */
   let chronicleEnter = () => {};
+  // Text enters with a soft rise. (No animated blur: filters re-rasterise every frame and stutter on phones.)
   function rise(tl, targets, pos, dur = .12, stagger = 0) {
-    return tl.fromTo(targets, { opacity: 0, y: 18, filter: 'blur(6px)' }, { opacity: 1, y: 0, filter: 'blur(0px)', duration: dur, stagger, ease: 'power2.out' }, pos);
+    return tl.fromTo(targets, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: dur, stagger, ease: 'power2.out' }, pos);
   }
-  function headIn(tl, targets, pos, dur = .14) { return tl.fromTo(targets, { scaleX: .94, opacity: 0, filter: 'blur(5px)' }, { scaleX: 1, opacity: 1, filter: 'blur(0px)', duration: dur, ease: 'power2.out' }, pos); }
+  function headIn(tl, targets, pos, dur = .14) { return tl.fromTo(targets, { scaleX: .93, opacity: 0 }, { scaleX: 1, opacity: 1, duration: dur, ease: 'power2.out' }, pos); }
 
   function initMotion() {
     gsap.registerPlugin(ScrollTrigger);
@@ -1041,7 +1105,15 @@ const CONFIG = {
     const Fpx = () => F * vh, hold = (i) => holdVH(i) * vh;
     const holdST = (i, tl, extra = {}) => ScrollTrigger.create(Object.assign({ trigger: secs[i], start: () => `top top-=${Fpx()}`, end: () => `+=${hold(i)}`, scrub: .45, animation: tl, invalidateOnRefresh: true }, extra));
     const riseST = (i, tl) => ScrollTrigger.create({ trigger: secs[i], start: 'top bottom', end: () => `top top-=${Fpx()}`, scrub: .45, animation: tl, invalidateOnRefresh: true });
-    const TL = () => gsap.timeline({ defaults: { ease: 'none' } }).to({}, { duration: 1 }, 0);
+    // Scroll timelines. Any entrance that starts after the scene begins has its "from" state applied
+    // up front with gsap.set, so when ScrollTrigger refreshes (fonts loading, resize) and rewinds the
+    // timeline, the element rewinds to hidden, never to its natural visible state. This is what stops
+    // content from showing early and then animating in a second time.
+    const TL = () => {
+      const tl = gsap.timeline({ defaults: { ease: 'none' } }).to({}, { duration: 1 }, 0);
+      tl.fromTo = (targets, from, to, pos) => { gsap.set(targets, from); return tl.to(targets, to, pos); };
+      return tl;
+    };
 
     // the previous scene sinks back and darkens as the next rises over it
     secs.forEach((s, i) => { if (!i) return; riseST(i, gsap.timeline({ defaults: { ease: 'none' } }).to(views[i - 1], { scale: .92, yPercent: -2 }, 0).to(shades[i - 1], { opacity: .62 }, 0)); });
