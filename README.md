@@ -55,6 +55,7 @@ The opener reads "A letter has arrived for Sharma Family" and the RSVP card is p
    the style anchor (`palace-sky`) first and pass it as the image reference for the rest. Keep the
    same file names so no code changes. The portraits (`bride`, `groom`, `couple`) and the
    monogram letters are the client-specific ones; scenes and ornaments can usually stay.
-4. **Optional**: drop a licensed track at `assets/music.mp3` (otherwise original music is generated
+4. **Music**: `assets/music.mp3` plays on loop (replace it with the client's licensed track, or set
+   `CONFIG.music.file` to `null` to use the original Raag Yaman violin piece generated
    in the browser), and set `CONFIG.assets.videos.palace` / `.ballroom` to 9:16 MP4 loops if you
    have them.

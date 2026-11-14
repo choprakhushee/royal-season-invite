@@ -114,7 +114,8 @@ const CONFIG = {
 
   colors: { powder: '#BFD4E6', lilac: '#C6B3D9', blush: '#F1D3D3', ivory: '#FBF7F0', sage: '#B5C4A8', marigold: '#E2A23B', gold: '#C2A15B', goldHi: '#EFE0B0', goldLo: '#A88743', ink: '#1F2A44' },
 
-  music: { file: 'assets/music.mp3', volume: 0.25, fadeIn: 3 },
+  // file: your own licensed track (looped). Set to null to use the original generated violin piece instead.
+  music: { file: 'assets/music.mp3', volume: 0.3, fadeIn: 3 },
 
   assets: {
     base: 'assets/',
@@ -618,21 +619,23 @@ const CONFIG = {
       const ctx = this.ctx, bar = 4 * this.raga.beat;
       while (this.nextBar < ctx.currentTime + 0.4) { this.scheduleBar(this.nextBar, this.bar++); this.nextBar += bar; }
     },
-    async detectFile() {
+    // Uses CONFIG.music.file when set; if it fails to load, falls back to the generated violin piece.
+    preload() {
       const f = CONFIG.music.file; if (!f) return;
-      try { const r = await fetch(f, { method: 'HEAD' }); if (r.ok && /audio|mpeg|octet/.test(r.headers.get('content-type') || 'audio')) this.mode = 'file'; } catch (e) { /* use generated music */ }
+      this.mode = 'file';
+      const el = this.el = new Audio(); el.loop = true; el.preload = 'auto'; el.src = f;
+      el.addEventListener('error', () => { this.mode = 'synth'; if (this.on && !this.timer) this.startSynth(); }, { once: true });
     },
+    startSynth() { this.nextBar = Math.max(this.nextBar, this.ctx.currentTime + .1); this.tick(); this.timer = setInterval(() => this.tick(), 60); },
     start() {
       if (!this.ensure()) return; this.on = true;
       const ctx = this.ctx, now = ctx.currentTime, vol = CONFIG.music.volume;
       this.music.gain.cancelScheduledValues(now); this.music.gain.setValueAtTime(this.music.gain.value, now); this.music.gain.linearRampToValueAtTime(vol, now + CONFIG.music.fadeIn);
       this.sfx.gain.setTargetAtTime(1, now, .05);
-      if (this.mode === 'file') {
-        if (!this.el) { this.el = new Audio(CONFIG.music.file); this.el.loop = true; this.el.crossOrigin = 'anonymous'; const src = ctx.createMediaElementSource(this.el); src.connect(this.music); }
+      if (this.mode === 'file' && this.el) {
+        if (!this.elSrc) { this.elSrc = ctx.createMediaElementSource(this.el); this.elSrc.connect(this.music); }
         this.el.play().catch(() => {});
-      } else if (!this.timer) {
-        this.nextBar = Math.max(this.nextBar, now + .1); this.tick(); this.timer = setInterval(() => this.tick(), 60);
-      }
+      } else if (!this.timer) this.startSynth();
       ui.music(true);
     },
     stop() {
@@ -1261,7 +1264,7 @@ const CONFIG = {
   buildOdometers(); tickCountdown(); setInterval(tickCountdown, 1000);
   initDances(); initCameos(); initClips(); initRSVP();
   FX.init(); Fireworks.init();
-  Sound.detectFile();
+  Sound.preload();
   loadWithin($('#opener')); loadWithin($('#s-chronicle')); loadWithin($('#s-palace'));
   document.body.classList.add('locked'); scrollTo(0, 0);
 
