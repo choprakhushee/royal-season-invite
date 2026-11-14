@@ -3,7 +3,7 @@
 A cinematic, scroll-driven wedding invitation by **Aamantran Atelier**: an Indian Regency
 romance narrated by an original society columnist, Lady Chandrika.
 
-Live: https://choprakhushee.github.io/Wedding-Invites/tara-weds-aarav/
+Live: https://choprakhushee.github.io/royal-season-invite/
 
 ## Files
 
@@ -22,7 +22,6 @@ Libraries: GSAP 3.12.5 + ScrollTrigger (cdnjs) and Lenis 1.1.13 (jsDelivr). No b
 ## Run locally
 
 ```bash
-cd tara-weds-aarav
 python3 -m http.server 8000
 ```
 
@@ -30,16 +29,15 @@ Open http://localhost:8000/ (add `?guest=Sharma%20Family` to personalise).
 
 ## Publish on GitHub Pages (free)
 
-1. Push the repository to GitHub.
-2. Repository → Settings → Pages → Source: *Deploy from a branch*, Branch: `main`, folder `/ (root)`.
-3. After about a minute the invite is live at `https://<user>.github.io/<repo>/tara-weds-aarav/`.
+Settings → Pages → Source: *Deploy from a branch*, Branch: `main`, folder `/ (root)` → Save.
+After about a minute the invite is live at https://choprakhushee.github.io/royal-season-invite/
 
 ## Personalised links
 
 Append `?guest=` with the guest's name (spaces as `%20`):
 
-- `…/tara-weds-aarav/?guest=Sharma%20Family`
-- `…/tara-weds-aarav/?guest=Dr.%20Meera%20Iyer`
+- https://choprakhushee.github.io/royal-season-invite/?guest=Sharma%20Family
+- https://choprakhushee.github.io/royal-season-invite/?guest=Dr.%20Meera%20Iyer
 
 The opener reads "A letter has arrived for Sharma Family" and the RSVP card is pre-filled.
 
